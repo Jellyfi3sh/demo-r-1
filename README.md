@@ -3,7 +3,7 @@ A demonstration of the basics of Jellyfish's lineage-preserving approach to data
 
 ## Introduction
 
-This repository serves as a demonstration of Jellyfish data processing approach. The primary drivers of the approach is transparency and reproducibility - at Jellyfish we firmly believe that any changes made to some data, however small those changes may seem, and any calculations performed on the data should be fully documented and reproducible.
+This repository serves as a demonstration of how to produce a monitoring report for an impact project, according to the Jellyfish data processing approach. The primary drivers of the approach is transparency and reproducibility - at Jellyfish we firmly believe that any changes made to some data, however small those changes may seem, and any calculations performed on the data should be fully documented and reproducible.
 
 ## The data
 
@@ -16,3 +16,9 @@ In many "real-life" cases, if not most, the rawest version of a dataset lives on
 To run all the files of this demonstration yourself, you will need a Pinata JWT. If you do not have a Pinata account, you can open a free one easily at https://pinata.cloud/. Once you have your Pinata JWT you should store it as an environment variable named "PINATA_JWT".
 
 You will naturally also need R, and the R packages listed at the end of each report chapter.
+
+## The how-to
+
+The top-level file in the directory is the 0-report-main.Rmd. This RMD, when rendered, produces the actual monitoring report to be given to a verifier or an auditor. The other RMDs in this repository correspond to chapters and sections of the report, and will be rendered automatically when the top-level RMD is rendered. 
+
+You can render an RMD to an HTML, PDF or .docx file; we strongly recommend making use of HTML files or PDFs. 
