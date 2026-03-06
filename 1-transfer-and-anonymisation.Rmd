@@ -167,6 +167,6 @@ metadataCids <- sapply(X = fnmsMetadata, FUN = function(fnm) {
 
 ## R session info
 
-```{r child="0-session-info.Rmd"}
+```{r child="session-info.Rmd"}
 ```
 
