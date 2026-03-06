@@ -11,21 +11,6 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Note to the reader
-
-This markdown file serves as a demonstration of the first phase of the Jellyfish data processing approach. It is the first of a set of markdown files that demonstrates the Jellyfish data processing approach end-to-end.
-
-The first phase always consists of the following three steps:
-(a) fetch the raw data from its host;
-(b) encrypt any sensitive variables (such as personally identifying information); and
-(c) upload the data to a content-addressed data store.
-
-The data that we'll be using was contributed to the public domain by the [National Biodiversity Data Centre (NBDC), Ireland](https://biodiversityireland.ie/). The dataset, as provided by the NBDC on their website, unfortunately does not contain the rawest version of the data - the data has been minimally cleaned by the NBDC before being made publicly available. For the purposes of this demonstration, however, we shall treat the publicly available version of the dataset from the NBDC's website as if it contained the original, raw, completely unmodified data.
-
-In many "real-life" cases, if not most, the rawest version of a dataset lives on a proprietary platform or a private server where it is only accessible to holders of specific credentials. As such, the first phase of the Jellyfish processing approach typically involves dealing with those credentials, and the file that performs the steps of the first phase can therefore only be executed by the holders of those credentials. In the interest of making this demonstration as informative as possible, we chose to make use of a public dataset (at the cost of not using a perfect "version 0"), so that anyone will be able to run all the demonstration files independently.
-
-To run all the files of this demonstration yourself, you will need a Pinata JWT. If you do not have a Pinata account, you can open a free one easily at https://pinata.cloud/. Once you have your Pinata JWT you should store it as an environment variable named "PINATA_JWT".
-
 ```{r echo=FALSE}
 # Load required packages.
 library(httr)
