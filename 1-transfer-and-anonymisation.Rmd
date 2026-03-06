@@ -1,0 +1,172 @@
+---
+title: "Data Transfer and Anonymisation"
+author: "John Marc"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Note to the reader
+
+This markdown file serves as a demonstration of the first phase of the Jellyfish data processing approach. It is the first of a set of markdown files that demonstrates the Jellyfish data processing approach end-to-end.
+
+The first phase always consists of the following three steps:
+(a) fetch the raw data from its host;
+(b) encrypt any sensitive variables (such as personally identifying information); and
+(c) upload the data to a content-addressed data store.
+
+The data that we'll be using was contributed to the public domain by the [National Biodiversity Data Centre (NBDC), Ireland](https://biodiversityireland.ie/). The dataset, as provided by the NBDC on their website, unfortunately does not contain the rawest version of the data - the data has been minimally cleaned by the NBDC before being made publicly available. For the purposes of this demonstration, however, we shall treat the publicly available version of the dataset from the NBDC's website as if it contained the original, raw, completely unmodified data.
+
+In many "real-life" cases, if not most, the rawest version of a dataset lives on a proprietary platform or a private server where it is only accessible to holders of specific credentials. As such, the first phase of the Jellyfish processing approach typically involves dealing with those credentials, and the file that performs the steps of the first phase can therefore only be executed by the holders of those credentials. In the interest of making this demonstration as informative as possible, we chose to make use of a public dataset (at the cost of not using a perfect "version 0"), so that anyone will be able to run all the demonstration files independently.
+
+To run all the files of this demonstration yourself, you will need a Pinata JWT. If you do not have a Pinata account, you can open a free one easily at https://pinata.cloud/. Once you have your Pinata JWT you should store it as an environment variable named "PINATA_JWT".
+
+```{r echo=FALSE}
+# Load required packages.
+library(httr)
+```
+
+## Overview
+
+This markdown file fetches the Citizen Science Beetle Records For Ireland from its host server, anonymises observer names, and uploads the anonymised dataset to IPFS via Pinata.
+
+## Step 1: Fetch data from host
+
+```{r echo=FALSE}
+rawDataUrl <- "https://maps.biodiversityireland.ie/Dataset/Download?datasetId=393"
+```
+
+The raw data is hosted at `r rawDataUrl`.
+
+1. Create a temporary file to store the download.
+
+```{r}
+destFile <- tempfile(fileext = ".zip")
+```
+
+2. Download the data into the local, temporary file.
+
+```{r}
+# Download the ZIP file
+download.file(
+  url = rawDataUrl, 
+  destfile = destFile, 
+  mode = "wb")
+```
+
+3. Extract the data and metadata from the downloaded ZIP archive.
+
+```{r}
+# Directory where files will be extracted to
+dirExtractTo <- "CitizenScienceBeetleRecords"
+dir.create(dirExtractTo, showWarnings = FALSE)
+
+# Unzip the archive
+unzip(zipfile = destFile, exdir = dirExtractTo)
+```
+
+The ZIP archive contained the following files:
+
+```{r}
+# List extracted files
+list.files(dirExtractTo, recursive = TRUE)
+```
+
+The CitizenScienceBeetleRecords.txt file contains the actual data; the other files are metadata files.
+
+4. Load the data into R.
+
+We'll use read.csv() with the the tab character as the separator.
+
+```{r}
+fnmData <- "CitizenScienceBeetleRecords.txt"
+fnmsMetadata <- setdiff(list.files(dirExtractTo, recursive = TRUE), fnmData)
+dfData <- read.csv(file = paste0(dirExtractTo, "/", fnmData), sep = "\t")
+```
+
+## Step 2: Encrypt sensitive variables
+
+For the purposes of demonstration, we shall pretend that the names of the observers, as recorded in the 'Recorder' variable, should not be made public and should therefore be encrypted. We'll encrypt them by replacing them with their MD5 hashes.
+
+```{r}
+nUniqueBefore <- length(unique(dfData$Recorder))
+dfData$Recorder <- sapply(X = dfData$Recorder, FUN = digest::digest, algo = "md5")
+nUniqueAfter <- length(unique(dfData$Recorder))
+
+if (nUniqueAfter != nUniqueBefore) {
+  stop("Nonces required to preserve uniqueness in 'Recorder' during encryption.")
+}
+```
+
+## Step 3: Upload the anonymised data and unmodified metadata to a content-addressed storage system
+
+Note: Good practice is to upload the data and metadata as a CAR, so that the metadata always travels with the data. For the purposes of this demonstration, however, we are making use of Pinata's free plan, which does not support CAR creation. We shall therefore upload the data and the metadata as separate files.
+
+1. Write the anonymised data to a CSV file.
+
+```{r}
+fpDataAnon <- tempfile(fileext = ".csv")
+write.csv(x = dfData, file = fpDataAnon)
+```
+
+2. Upload the CSV containing the anonymised data to IPFS, via Pinata.
+
+```{r}
+res <- httr::POST(
+  url = "https://uploads.pinata.cloud/v3/files", 
+  config = httr::add_headers(
+    .headers = c("Authorization" = paste("Bearer", Sys.getenv("PINATA_JWT")))), 
+  body = list(
+    network = "public",
+    file = httr::upload_file(path = fpDataAnon)), 
+  encode = "multipart")
+
+if (res$status_code >= 300) {
+  stop("res$status_code = ", res$status_code)
+}
+
+res <- httr::content(x = res, as = "parsed")
+cidData <- res$data$cid
+```
+
+IPFS CID of anonymised data file: `r cidData`.
+
+3. Upload the metadata files to IPFS, via Pinata.
+
+```{r}
+metadataCids <- sapply(X = fnmsMetadata, FUN = function(fnm) {
+  
+  fp <- paste0(dirExtractTo, "/", fnm)
+  
+  res <- httr::POST(
+    url = "https://uploads.pinata.cloud/v3/files", 
+    config = httr::add_headers(
+      .headers = c("Authorization" = paste("Bearer", Sys.getenv("PINATA_JWT")))), 
+    body = list(
+      network = "public",
+      file = httr::upload_file(path = fp)), 
+    encode = "multipart")
+  
+  if (res$status_code >= 300) {
+    stop("res$status_code = ", res$status_code)
+  }
+  
+  res <- httr::content(x = res, as = "parsed")
+  cid <- res$data$cid
+  cat(sprintf("IPFS CID for metadata file %s: %s\n", fnm, cid))
+  
+  return(cid)
+  
+})
+```
+
+## R session info
+
+```{r child="0-session-info.Rmd"}
+```
+

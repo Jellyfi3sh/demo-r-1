@@ -1,0 +1,46 @@
+
+```{r}
+seshInfo <- sessionInfo()
+```
+
+This report was produced with `r seshInfo$R.version$version.string` running on `r seshInfo$running`.
+
+The following packages were present in the R environment:
+
+```{r}
+
+lsdfPkgs <- list()
+
+# Base packages
+pkgNms <- seshInfo$basePkgs
+if (length(pkgNms) > 0) {
+  lsdfPkgs[[length(lsdfPkgs) + 1]] <- data.frame(
+    package = pkgNms,
+    version = sapply(pkgNms, function(p) as.character(packageVersion(p))),
+    load_status = "loaded (base)")
+}
+# Loaded, but not attached, packages
+pkgNms <- names(seshInfo$loadedOnly)
+if (length(pkgNms) > 0) {
+  lsdfPkgs[[length(lsdfPkgs) + 1]] <- data.frame(
+    package = pkgNms,
+    version = sapply(pkgNms, function(p) as.character(packageVersion(p))),
+    load_status = "loaded (user), not attached")
+}
+
+# Attached packages
+pkgNms <- names(seshInfo$otherPkgs)
+if (length(pkgNms) > 0) {
+  lsdfPkgs[[length(lsdfPkgs) + 1]]<- data.frame(
+    package = pkgNms,
+    version = sapply(pkgNms, function(p) as.character(packageVersion(p))),
+    load_status = "attached")
+}
+
+dfPkgs <- as.data.frame(data.table::rbindlist(lsdfPkgs))
+rm(lsdfPkgs)
+dfPkgs <- dfPkgs[order(dfPkgs$package),]
+rownames(dfPkgs) <- NULL
+knitr::kable(dfPkgs)
+```
+

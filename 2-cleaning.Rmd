@@ -1,0 +1,312 @@
+---
+title: "Data Cleaning"
+author: "John Marc"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+
+This markdown file fetches the anonymised dataset (produced by [1-transfer-and-anonymisation.Rmd](#TODO-URLhere)) and takes it through the second phase of the Jellyfish data processing approach. The second phase involves cleaning (quality control) and transformation (if necessary).
+
+In the interest of keeping the demonstration simple and easy to follow, the quality control performed by this file will be kept relatively minimal.
+
+## Step 1: Fetch anonymised data from content-addressed storage
+
+```{r}
+anonDataCid <- "bafybeigvdwaevrt2kugd54xlqra6gwaiqygthzbaq26fm4e573jyoxjqzi"
+ipfsGatewayUrl <- "https://ipfs.io/ipfs"
+```
+
+The IPFS CID of the anonymised data in CSV format is `r anonDataCid`.
+
+```{r}
+fpDownload <- tempfile(fileext = ".csv")
+download.file(
+  url = paste0(ipfsGatewayUrl, "/", anonDataCid), 
+  destfile = fpDownload, 
+  mode = "wb")
+```
+
+## Step 2: Read the data into a data frame
+
+```{r}
+dfData <- read.csv(fpDownload)
+```
+
+## Step 3: Standardise variable names
+
+```{r}
+names(dfData)[names(dfData) == "Vice.county"] <- "ViceCounty"
+names(dfData)[names(dfData) == "Additional.information"] <- "AdditionalInformation"
+names(dfData) <- snakecase::to_snake_case(names(dfData))
+```
+
+## Step 4: Cleaning and transformation: First pass
+
+### Replace all empty character values with NA_character_
+
+Note: Variable 'site_name' seems to contain some multibyte characters and will therefore need to be dealth with separately.
+
+```{r}
+idxxChar <- which(sapply(X = dfData, FUN = is.character))
+
+for (vnm in setdiff(names(dfData)[idxxChar], "site_name")) {
+  x <- dfData[[vnm]]
+  x[which(nchar(x) == 0)] <- NA_character_
+  dfData[[vnm]] <- x
+}
+```
+
+### Variable 'x'
+
+This variable was added automatically when we wrote the anonymised data to CSV in 1-transfer-and-anonymisation.Rmd, so we should remove it.
+
+```{r}
+dfData$x <- NULL
+```
+
+### Variable 'record_key'
+
+This variable gives the ID of each record and should therefore be a character field to prevent it from being modified by accident during numeric operations.
+
+```{r}
+dfData$record_key <- format(dfData$record_key, scientific = FALSE)
+```
+
+### Variable 'survey_key'
+
+Check what's inside:
+
+```{r}
+table(dfData$survey_key, exclude = NULL)
+```
+
+This is an empty variable and can therefore be removed:
+
+```{r}
+dfData$survey_key <- NULL
+```
+
+### Variable 'sample_key'
+
+Check what's inside:
+
+```{r}
+table(dfData$sample_key, exclude = NULL)
+```
+
+This is an empty variable and can therefore be removed:
+
+```{r}
+dfData$sample_key <- NULL
+```
+
+### Variables 'start_date', 'end_date', 'date_type', and 'date'
+
+Inspection:
+
+```{r}
+table(dfData$date_type, exclude = NULL)
+```
+
+Variable 'date_type' is not informative and can therefore be removed:
+
+```{r}
+dfData$date_type <- NULL
+```
+
+Convert 'start_date', 'end_date' and 'date' to type 'Date', being careful not to lose any values due to textual entry errors:
+
+```{r}
+for (vnm in c("start_date", "end_date", "date")) {
+  nNaBefore <- length(which(is.na(dfData[[vnm]])))
+  dfData[[vnm]] <- as.Date.character(x = dfData[[vnm]], format = "%d/%m/%Y")
+  nNaAfter <- length(which(is.na(dfData[[vnm]])))
+  if (nNaAfter > nNaBefore) {
+    stop(sprintf("NAs introduced for '%s' through character-to-date conversion.", vnm))
+  }
+}
+```
+
+According to the dataset's metadata, all dates should be between 2006 and 2024 (both years included), so we'll check for that:
+
+```{r}
+dfDateRanges <- as.data.frame(
+  data.table::rbindlist(
+    lapply(X = c("start_date", "end_date", "date"), FUN = function(vnm) {
+      data.frame(
+        var = vnm, 
+        min_yr = min(lubridate::year(dfData[[vnm]])),
+        max_yr = max(lubridate::year(dfData[[vnm]])))
+    })))
+
+knitr::kable(dfDateRanges)
+```
+
+All dates seem within range.
+
+Check that 'date' is either the same as 'start_date' or the same as 'end_date':
+
+```{r}
+idxx <- which(dfData$date != dfData$start_date & dfData$date != dfData$end_date)
+```
+
+No records (`r length(idxx)`) have a date value different from both their start_date and their end_date values, so all seems well.
+
+### Variable 'taxon_version_key'
+
+Check values:
+
+```{r}
+table(dfData$taxon_version_key, exclude = NULL)
+```
+
+Nothing suspicious.
+
+### Variable 'taxon_name'
+
+Check values:
+
+```{r}
+table(dfData$taxon_name, exclude = NULL)
+```
+
+Nothing suspicious.
+
+### Variable 'grid_reference'
+
+This gives the location of the observation according to the Irish National Grid projection. Let's check if all values follow the same spatial resolution:
+
+```{r}
+table(nchar(dfData$grid_reference))
+```
+
+Different spatial resolutions are represented, so we need to convert all references to the same spatial resolution. The lowest, common resolution seem to be 1 km (5 characters, i.e., 1 letter + 2 digits).
+
+```{r}
+idxx <- which(nchar(dfData$grid_reference) > 5)
+dfData$grid_reference[idxx] <- sapply(X = dfData$grid_reference[idxx], FUN = function(x) {
+  splts <- strsplit(x = x, split = "")[[1]]
+  idxHalf <- 1 + (length(splts) -1)/2
+  newX <- paste(c(splts[1], splts[2:3], splts[(idxHalf+1):(idxHalf+2)]), 
+                sep = "", collapse = "")
+  return(newX)
+})
+```
+
+Check character lengths again:
+
+```{r}
+table(nchar(dfData$grid_reference))
+```
+
+All good.
+
+### Variables 'east', 'north', and 'projection'
+
+Some coordinates are given as OSI, while others are given as WGS84. Convert all to WGS84.
+
+```{r}
+idxx <- which(dfData$projection == "OSI")
+pts_osi <- sf::st_as_sf(
+  x = dfData[idxx,], 
+  coords = c("east", "north"), 
+  crs = 29902)  # 29902 or 2157
+pts_wgs84 <- sf::st_transform(
+  x = pts_osi, 
+  crs = 4326)
+#sf::st_coordinates(pts_wgs84)
+#plot(pts_wgs84$geometry)
+
+dfData$east[idxx] <- sf::st_coordinates(pts_wgs84)[,"X"]
+dfData$north[idxx] <- sf::st_coordinates(pts_wgs84)[,"Y"]
+dfData$projection[idxx] <- "WGS84"
+
+plot(
+  sf::st_as_sf(
+    x = dfData, 
+    coords = c("east", "north"), 
+    crs = 4326)$geometry)
+```
+
+### Variable 'zero_abundance'
+
+Check values:
+
+```{r}
+table(dfData$zero_abundance, exclude = NULL)
+```
+
+Convert to type 'logical':
+
+```{r}
+dfData$zero_abundance <- dfData$zero_abundance != "False"
+```
+
+### Variable 'under_validation'
+
+Check values:
+
+```{r}
+table(dfData$under_validation, exclude = NULL)
+```
+
+Convert to type 'logical':
+
+```{r}
+dfData$under_validation <- dfData$under_validation != "False"
+```
+
+### Variable 'county':
+
+Check values:
+
+```{r}
+table(dfData$county, exclude = NULL)
+```
+
+Nothing suspicious.
+
+## Step 5: Upload cleaned data to IPFS
+
+1. Save the data as an RDS file to preserve R-specific types and formatting.
+
+```{r}
+fpRds <- "dfCleaned.rds"
+saveRDS(object = dfData, file = fpRds)
+```
+
+2. Upload the RDS to IPFS, via Pinata.
+
+```{r}
+res <- httr::POST(
+  url = "https://uploads.pinata.cloud/v3/files", 
+  config = httr::add_headers(
+    .headers = c("Authorization" = paste("Bearer", Sys.getenv("PINATA_JWT")))), 
+  body = list(
+    network = "public",
+    file = httr::upload_file(path = fpRds)), 
+  encode = "multipart")
+
+if (res$status_code >= 300) {
+  stop("res$status_code = ", res$status_code)
+}
+
+res <- httr::content(x = res, as = "parsed")
+cidData <- res$data$cid
+```
+
+IPFS CID of clean data RDS file: `r cidData`.
+
+## R session info
+
+```{r child="0-session-info.Rmd"}
+```
+

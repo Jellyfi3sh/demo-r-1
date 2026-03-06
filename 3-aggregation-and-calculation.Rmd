@@ -1,0 +1,157 @@
+---
+title: "Aggregation and Calculation"
+author: "John Marc"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+
+This markdown file fetches the cleaned dataset (produced by [2-cleaning.Rmd](#TODO-URLhere)) and calculates the variables required for reporting. The variables that will be calculated are those prescribed by the [Methodology for the Estimation of Beetle Biodiversity from Citizen Science Data](https://doesnotexist.xyz).
+
+## Step 1: Fetch cleaned data from content-addressed storage
+
+```{r}
+cleanedDataCid <- "bafkreicakzjr66xkin4qbeu7sox32dysweuu2d5vdw4cfpllqmozfphnh4"
+ipfsGatewayUrl <- "https://ipfs.io/ipfs"
+```
+
+The IPFS CID of the cleaned data in RDS format is `r cleanedDataCid`.
+
+```{r}
+fpDownload <- tempfile(fileext = ".rds")
+download.file(
+  url = paste0(ipfsGatewayUrl, "/", cleanedDataCid), 
+  destfile = fpDownload, 
+  mode = "wb")
+```
+
+## Step 2: Read the data into a data frame
+
+```{r}
+dfData <- readRDS(fpDownload)
+```
+
+## Step 3: Drop rows for years that do not meet the methodology's coverage requirements
+
+The methodology requires at least 20 observations per year, when performing annual calculations.
+
+```{r}
+dfData$year <- lubridate::year(dfData$date)
+```
+
+The dataset currently contains the following number of observations for each year:
+
+```{r}
+dfNobsYr <- as.data.frame(
+  dplyr::summarise(
+    dplyr::group_by(dfData, year),
+    n = dplyr::n(),
+    .groups = "drop"))
+
+knitr::kable(dfNobsYr)
+```
+
+Drop observations from years with fewer than 20 observations in total:
+
+```{r}
+dfData <- dfData[which(dfData$year %in% dfNobsYr$year[which(dfNobsYr$n >= 20)]),]
+```
+
+## Step 4: Descriptive statistics
+
+Number of observations per taxon per year:
+
+```{r}
+dfNobsTaxYr <- as.data.frame(
+  dplyr::summarise(
+    dplyr::group_by(dfData, taxon_name, year),
+    n = dplyr::n(),
+    .groups = "drop"))
+
+knitr::kable(x = dfNobsTaxYr[1:10,])
+```
+
+Average number of observations per taxon per year:
+
+```{r}
+dfAvgNobsTaxYr <- as.data.frame(
+  dplyr::summarise(
+    dplyr::group_by(dfNobsTaxYr, taxon_name),
+    n_avg = round(mean(n), digits = 2),
+    .groups = "drop"))
+
+knitr::kable(x = dfAvgNobsTaxYr[1:10,])
+```
+
+Number of taxa observed per county per year:
+
+```{r}
+dfNtaxCountyYr <- as.data.frame(
+  dplyr::summarise(
+    dplyr::group_by(dfData, county, year),
+    n = length(unique(taxon_name)),
+    .groups = "drop"))
+
+knitr::kable(x = dfNtaxCountyYr[1:10,])
+```
+
+## Step 5: Calculate variables required by methodology
+
+Average number of taxa observed per square kilometre per year:
+
+```{r}
+dfNtaxSqKmYr <- as.data.frame(
+  dplyr::summarise(
+    dplyr::group_by(dfData, year),
+    n_taxa = length(unique(taxon_name)),
+    n_sq_km = length(unique(grid_reference)),
+    .groups = "drop"))
+
+dfNtaxSqKmYr$ntax_p_sqkm <- dfNtaxSqKmYr$n_taxa / dfNtaxSqKmYr$n_sq_km
+
+knitr::kable(dfNtaxSqKmYr)
+```
+
+## Step 6: Store calculated values on IPFS
+
+1. Jellyfish strongly recommends storing the calculation results as JSON, so let's write the results to a JSON file:
+
+```{r}
+fpOut <- "calculationResults.json"
+jsonOut <- jsonlite::write_json(dfNtaxSqKmYr, path = fpOut)
+```
+
+2. Upload the JSON file to IPFS, via Pinata.
+
+```{r}
+res <- httr::POST(
+  url = "https://uploads.pinata.cloud/v3/files", 
+  config = httr::add_headers(
+    .headers = c("Authorization" = paste("Bearer", Sys.getenv("PINATA_JWT")))), 
+  body = list(
+    network = "public",
+    file = httr::upload_file(path = fpOut)), 
+  encode = "multipart")
+
+if (res$status_code >= 300) {
+  stop("res$status_code = ", res$status_code)
+}
+
+res <- httr::content(x = res, as = "parsed")
+cidCalcRes <- res$data$cid
+```
+
+IPFS CID of the calculation results as JSON: `r cidCalcRes`.
+
+## R session info
+
+```{r child="0-session-info.Rmd"}
+```
+
