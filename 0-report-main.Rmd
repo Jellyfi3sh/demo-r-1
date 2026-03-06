@@ -1,0 +1,135 @@
+---
+title: "Ireland Citizen Science Beetle Biodiversity Project"
+subtitle: "Monitoring Report: 2006-2024"
+author: "John Marc"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This report details the process through which the monitoring data for the Ireland Citizen Science Beetle Biodiversity Project was cleaned and prepared, and the variable values for the project's chosen biodiversity indicator methodology were calculated. 
+
+The report consists of three chapters:  
+1. **Transfer and anonymisation** This chapter documents the extraction of the raw data from its host server, the encryption of sensitive variables, and the publishing of the resulting dataset on IPFS for public reviewability.  
+2. **Cleaning** This chapter documents the quality control (QC) checks that were performed on the data, along with any changes made to the data where issues were flagged by QC.  
+3. **Calculation** This chapter describes the process through which the methodology variables were calculated from the cleaned data. It also provides some descriptive statistics of the data.  
+
+Each of the chapters was produced by an RMarkdown file dedicated to that chapter. The markdown files, along with the resulting report chapter, can be found on IPFS, as detailed below.
+
+```{r}
+# Generate each chapter, and upload the resulting HTML, along with the chapter's RMD, to IPFS.
+
+chapterFnms <- c(
+  "1-transfer-and-anonymisation", 
+  "2-cleaning", 
+  "3-calculation")
+
+htmlCids <- c("bafybeicqwgkdediycxkke4t7uqqm522rpo23cdz6l43n33nberno5nj6pi", 
+"bafybeiboulx4cn7yqymik2pjyb55nlqxufhre4ix2nwx4oxafsvrudteui", 
+"bafybeid6pfg5kpf7q77gt63i3xytnwsnczerd2yxaqtzvgoio25jxm77tu")
+rmdCids <- c("bafkreiehc46dvm5w2aphzvzwsufapjftmh7lqlwteaaey2gs627txplyue", 
+"bafkreigapkbz4ikxsfdt5kzcmh5rbw6yimun7rff2lj7n72ccrmm5ukszy", 
+"bafkreiezur2wbwvxxcqzvop4rvwsm26te5mjifkotzhyqhnbiug32ey4vm")
+
+if (FALSE) {
+for (fnm in chapterFnms) {
+  
+  message(fnm)
+  
+  # Generate chapter's HTML.
+  rmarkdown::render(
+    input = paste0(fnm, ".Rmd"), 
+    output_format = "html_document", 
+    output_file = paste0(fnm, ".html"))
+  
+  message("cp1")
+  
+  # Upload the HTML to IPFS.
+  {
+    res <- httr::POST(
+      url = "https://uploads.pinata.cloud/v3/files", 
+      config = httr::add_headers(
+        .headers = c("Authorization" = paste("Bearer", Sys.getenv("PINATA_JWT")))), 
+      body = list(
+        network = "public",
+        file = httr::upload_file(path = paste0(fnm, ".html"))), 
+      encode = "multipart")
+    
+    if (res$status_code >= 300) {
+      stop("res$status_code = ", res$status_code)
+    }
+    
+    res <- httr::content(x = res, as = "parsed")
+    htmlCids <- c(htmlCids, res$data$cid)
+  }
+  
+  message("cp2")
+  
+  # Upload the chapter's RMD to IPFS.
+  {
+    res <- httr::POST(
+      url = "https://uploads.pinata.cloud/v3/files", 
+      config = httr::add_headers(
+        .headers = c("Authorization" = paste("Bearer", Sys.getenv("PINATA_JWT")))), 
+      body = list(
+        network = "public",
+        file = httr::upload_file(path = paste0(fnm, ".Rmd"))), 
+      encode = "multipart")
+    
+    if (res$status_code >= 300) {
+      stop("res$status_code = ", res$status_code)
+    }
+    
+    res <- httr::content(x = res, as = "parsed")
+    rmdCids <- c(rmdCids, res$data$cid)
+  }
+  
+  message("cp3")
+  
+}
+}
+```
+
+## Table of Contents
+
+```{r}
+ipfsGatewayUrl <- "https://ipfs.io/ipfs"
+```
+
+Chapter 1: [Report Chapter (HTML)](`r paste0(ipfsGatewayUrl, "/", htmlCids[1])`) | [RMD](`r paste0(ipfsGatewayUrl, "/", rmdCids[1])`)  
+Chapter 2: [Report Chapter (HTML)](`r paste0(ipfsGatewayUrl, "/", htmlCids[2])`) | [RMD](`r paste0(ipfsGatewayUrl, "/", rmdCids[2])`)  
+Chapter 3: [Report Chapter (HTML)](`r paste0(ipfsGatewayUrl, "/", htmlCids[3])`) | [RMD](`r paste0(ipfsGatewayUrl, "/", rmdCids[3])`)  
+
+## Summary
+
+The results per annum for Ireland's beetle biodiversity, calculated from the collected data as the number of taxa observed per square kilometre, are given below:
+
+Note: Years with not enough observations, as required by the methodology, were excluded from the results.
+
+```{r}
+# Download results from IPFS:
+resultsCid <- "bafkreidbqkngwnmkcscwsbiwcgc6nxchcmfwhlg7n4rie22n52nc6urczu"
+ipfsGatewayUrl <- "https://ipfs.io/ipfs"
+
+# Read in as a data.frame.
+fpDownload <- tempfile(fileext = ".json")
+download.file(
+  url = paste0(ipfsGatewayUrl, "/", resultsCid), 
+  destfile = fpDownload, 
+  mode = "wb")
+
+# Display.
+dfResults <- as.data.frame(
+  data.table::rbindlist(
+    jsonlite::read_json(path = fpDownload)))
+
+knitr::kable(dfResults)
+```
+
