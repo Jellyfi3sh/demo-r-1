@@ -19,6 +19,6 @@ You will naturally also need R, and the R packages listed at the end of each rep
 
 ## The how-to
 
-The top-level file in the directory is the 0-report-main.Rmd. This RMD, when rendered, produces the actual monitoring report to be given to a verifier or an auditor. The other RMDs in this repository correspond to chapters and sections of the report, and will be rendered automatically when the top-level RMD is rendered. 
+The top-level file in the directory is the 0-report-main.Rmd. This RMD, when rendered, produces the actual [monitoring report](https://ipfs.io/ipfs/bafybeie2oqp5h5jtzgvcblw7wmbhufal23vm3tqggrdy2yoljqpwqpw4me) to be given to a verifier or an auditor. The other RMDs in this repository correspond to chapters and sections of the report, and will be rendered automatically when the top-level RMD is rendered. 
 
 You can render an RMD to an HTML, PDF or .docx file; we strongly recommend making use of HTML files or PDFs. 
