@@ -47,3 +47,11 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# Other
+*.Rproj
+*.html
+*.rds
+*.Rds
+*.Rda
+*.json
